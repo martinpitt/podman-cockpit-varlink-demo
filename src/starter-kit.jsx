@@ -42,9 +42,11 @@ function varlinkCall(channel, method, parameters) {
 
             var reply = decoder.decode(data.slice(0, -1));
             var json = JSON.parse(reply);
-            if (json.parameters)
+            if (json.parameters) {
+                // debugging
+                console.log("varlinkCall", method, "→", JSON.stringify(json.parameters));
                 resolve(json.parameters)
-            else if (json.error)
+            } else if (json.error)
                 reject(json.error)
             else
                 reject("protocol error: reply has neither parameters nor error: " + reply);
@@ -58,8 +60,10 @@ function varlinkCall(channel, method, parameters) {
 
 
 export class StarterKit extends React.Component {
-    constructor() {
-        super();
+    constructor(props) {
+        super(props);
+
+        this.state = { version: { version: "unknown" }, images: [] };
 
         let podman = cockpit.channel({
             payload: "stream",
@@ -68,17 +72,32 @@ export class StarterKit extends React.Component {
         });
 
         varlinkCall(podman, "io.projectatomic.podman.GetVersion")
-            .then(reply => this.setState({ version: reply.version }))
+            .then(reply => {
+                this.setState({ version: reply.version });
+
+                // we have to chain this, we can't do parallel calls on one channel
+                varlinkCall(podman, "io.projectatomic.podman.ListImages")
+                    .then(reply => this.setState({ images: reply.images }))
+                    .catch(ex => console.error("Failed to do ListImages call:", JSON.stringify(ex)));
+            })
             .catch(ex => console.error("Failed to do GetVersion call:", JSON.stringify(ex)));
+
     }
 
     render() {
+        let images = this.state.images.map(image => <li>{ image.repoTags.join(", ") } (created: {image.created})</li>);
+
         return (
             <div className="container-fluid">
                 <h2>Podman Varlink Demo</h2>
                 <div>
-                    <span>podman version: {this.state.version ? this.state.version.version : "unknown"}</span>
+                    <span>podman version: {this.state.version.version}</span>
                 </div>
+
+                <h3>Images</h3>
+                <ul>
+                    {images}
+                </ul>
             </div>
         );
     }
