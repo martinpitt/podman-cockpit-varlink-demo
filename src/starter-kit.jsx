@@ -31,8 +31,13 @@ const decoder = cockpit.utf8_decoder(true);
 
 function varlinkCall(channel, method, parameters) {
     return new Promise((resolve, reject) => {
+        function on_close(event, options) {
+            reject(options.problem || options);
+        }
+
         function on_message(event, data) {
             channel.removeEventListener("message", on_message);
+            channel.removeEventListener("close", on_close);
 
             // FIXME: support answer in multiple chunks until null byte
             if (data[data.length - 1] != 0) {
@@ -52,6 +57,7 @@ function varlinkCall(channel, method, parameters) {
                 reject("protocol error: reply has neither parameters nor error: " + reply);
         }
 
+        channel.addEventListener("close", on_close);
         channel.addEventListener("message", on_message);
         channel.send(encoder.encode(JSON.stringify({ method, parameters: (parameters || {}) })));
         channel.send([0]); // message separator
