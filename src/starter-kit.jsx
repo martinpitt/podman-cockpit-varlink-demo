@@ -47,13 +47,13 @@ function varlinkCall(channel, method, parameters) {
 
             var reply = decoder.decode(data.slice(0, -1));
             var json = JSON.parse(reply);
-            if (json.parameters) {
+            if (json.error)
+                reject(json.error)
+            else if (json.parameters) {
                 // debugging
                 console.log("varlinkCall", method, "→", JSON.stringify(json.parameters));
                 resolve(json.parameters)
-            } else if (json.error)
-                reject(json.error)
-            else
+            } else
                 reject("protocol error: reply has neither parameters nor error: " + reply);
         }
 
