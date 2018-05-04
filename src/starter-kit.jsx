@@ -29,7 +29,17 @@ import React from 'react';
 const encoder = cockpit.utf8_encoder();
 const decoder = cockpit.utf8_decoder(true);
 
-function varlinkCall(channel, method, parameters) {
+const PODMAN = { unix: "/run/io.projectatomic.podman" };
+
+/**
+ * Do a varlink call on an existing channel. You must *never* call this
+ * multiple times in parallel on the same channel! Serialize the calls or use
+ * `varlinkCall()`.
+ *
+ * Returns a promise that resolves with the result parameters or rejects with
+ * an error message.
+ */
+function varlinkCallChannel(channel, method, parameters) {
     return new Promise((resolve, reject) => {
         function on_close(event, options) {
             reject(options.problem || options);
@@ -64,6 +74,16 @@ function varlinkCall(channel, method, parameters) {
     });
 }
 
+/**
+ * Do a varlink call on a new channel. This is more expensive than
+ * `varlinkCallChannel()` but allows multiple parallel calls.
+ */
+function varlinkCall(channelOptions, method, parameters) {
+    var channel = cockpit.channel(Object.assign({payload: "stream", binary: true}, channelOptions));
+    var response = varlinkCallChannel(channel, method, parameters);
+    response.finally(() => channel.close());
+    return response;
+}
 
 export class StarterKit extends React.Component {
     constructor(props) {
@@ -71,29 +91,17 @@ export class StarterKit extends React.Component {
 
         this.state = { version: { version: "unknown" }, images: [], containers: [] };
 
-        let podman = cockpit.channel({
-            payload: "stream",
-            unix: "/run/io.projectatomic.podman",
-            binary: true,
-        });
-
-        varlinkCall(podman, "io.projectatomic.podman.GetVersion")
-            .then(reply => {
-                this.setState({ version: reply.version });
-
-                // we have to chain this, we can't do parallel calls on one channel
-                varlinkCall(podman, "io.projectatomic.podman.ListImages")
-                    .then(reply => {
-                        this.setState({ images: reply.images });
-
-                        varlinkCall(podman, "io.projectatomic.podman.ListContainers")
-                            .then(reply => this.setState({ containers: reply.containers}))
-                            .catch(ex => console.error("Failed to do ListContainers call:", JSON.stringify(ex)));
-                    })
-                    .catch(ex => console.error("Failed to do ListImages call:", JSON.stringify(ex)));
-
-            })
+        varlinkCall(PODMAN, "io.projectatomic.podman.GetVersion")
+            .then(reply => this.setState({ version: reply.version }))
             .catch(ex => console.error("Failed to do GetVersion call:", JSON.stringify(ex)));
+
+        varlinkCall(PODMAN, "io.projectatomic.podman.ListImages")
+            .then(reply => this.setState({ images: reply.images }))
+            .catch(ex => console.error("Failed to do ListImages call:", JSON.stringify(ex)));
+
+        varlinkCall(PODMAN, "io.projectatomic.podman.ListContainers")
+            .then(reply => this.setState({ containers: reply.containers}))
+            .catch(ex => console.error("Failed to do ListContainers call:", JSON.stringify(ex)));
     }
 
     render() {
@@ -118,5 +126,4 @@ export class StarterKit extends React.Component {
             </div>
         );
     }
-
 }
