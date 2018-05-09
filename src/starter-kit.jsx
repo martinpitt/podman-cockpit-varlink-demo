@@ -100,8 +100,8 @@ export class StarterKit extends React.Component {
             .catch(ex => console.error("Failed to do ListImages call:", JSON.stringify(ex)));
 
         varlinkCall(PODMAN, "io.projectatomic.podman.ListContainers")
-            .then(reply => this.setState({ containers: reply.containers}))
-            .catch(ex => console.error("Failed to do ListContainers call:", JSON.stringify(ex)));
+            .then(reply => this.setState({ containers: reply.containers || [] }))
+            .catch(ex => console.error("Failed to do ListContainers call:", JSON.stringify(ex), ex.toString()));
     }
 
     render() {
